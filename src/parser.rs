@@ -51,6 +51,7 @@ named!(pub block_header<BlockHeader>,
 #[derive(Debug,Clone,PartialEq)]
 pub enum Block {
     List(usize, List),
+    Avih(MainAVIHeader),
     Unimplemented,
     Default,
 }
@@ -96,7 +97,7 @@ pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8
           b"IDIT" => value!(Block::Unimplemented) |
           b"dmlh" => value!(Block::Unimplemented) |
           b"amvh" => value!(Block::Unimplemented) |
-          b"avih" => value!(Block::Unimplemented) |
+          b"avih" => map!(avih, |h| Block::Avih(h)) |
           b"strh" => value!(Block::Unimplemented) |
           b"strf" => value!(Block::Unimplemented) |
           b"indx" => value!(Block::Unimplemented) |
@@ -106,6 +107,48 @@ pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8
         )  >>
         (block)
 
+    )
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct MainAVIHeader {
+    microsec_per_frame:    u32,
+    max_bytes_per_sec:     u32,
+    padding_granularity:   u32,
+    flags:                 u32,
+    total_frames:          u32,
+    initial_frames:        u32,
+    streams:               u32,
+    suggested_buffer_size: u32,
+    width:                 u32,
+    height:                u32,
+}
+
+pub fn avih(input: &[u8]) -> IResult<&[u8], MainAVIHeader> {
+    do_parse!(input,
+        microsec_per_frame:    le_u32 >>
+        max_bytes_per_sec:     le_u32 >>
+        padding_granularity:   le_u32 >>
+        flags:                 le_u32 >>
+        total_frames:          le_u32 >>
+        initial_frames:        le_u32 >>
+        streams:               le_u32 >>
+        suggested_buffer_size: le_u32 >>
+        width:                 le_u32 >>
+        height:                le_u32 >>
+                               take!(4) >>
+        (MainAVIHeader {
+            microsec_per_frame,
+            max_bytes_per_sec,
+            padding_granularity,
+            flags,
+            total_frames,
+            initial_frames,
+            streams,
+            suggested_buffer_size,
+            width,
+            height,
+        })
     )
 }
 

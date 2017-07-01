@@ -1,4 +1,4 @@
-use nom::{IResult,Offset};
+use nom::{HexDisplay,IResult,Offset};
 use parser::{self,block,header,Block};
 
 #[derive(Debug,Clone,PartialEq)]
@@ -48,7 +48,12 @@ pub fn parse_blocks(input: &[u8], file_size: usize, offset: usize, level: List) 
         IResult::Done(i, blk) => {
             let remaining_offset = input.offset(i);
             match blk {
-              Block::Unimplemented | Block::Default  => panic!(),
+                Block::Unimplemented => panic!("unimplemented block:\n{}", &input[..input.offset(i)].to_hex(16)),
+                Block::Default       => panic!("default block:\n{}", &input[..input.offset(i)].to_hex(16)),
+                Block::Avih(h)       => {
+                    println!("got main AVI header: {:?}", h);
+                    (remaining_offset, State::Blocks(file_size, offset, level))
+                },
                 Block::List(size, l) => {
                     match level {
                         List::Nil => (remaining_offset,
