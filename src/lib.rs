@@ -33,6 +33,23 @@ named!(pub header<Header>,
     )
 );
 
+#[derive(Debug,Clone,PartialEq)]
+pub struct BlockHeader {
+    tag:  u32,
+    size: u32,
+}
+
+named!(pub block_header<BlockHeader>,
+    do_parse!(
+        tag:  le_u32 >>
+        size: le_u32 >>
+        (BlockHeader {
+            tag,
+          size,
+        })
+    )
+);
+
 #[cfg(test)]
 mod tests {
     use nom::IResult;
@@ -45,8 +62,50 @@ mod tests {
     fn parse_header() {
         let data = header(&drop[..12]);
         println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Header {
+                    magic1:    b"RIFF",
+                    file_size: 675628,
+                    magic2:    b"AVI ",
+            })
+        );
+
         let data = header(&verona[..12]);
         println!("data: {:?}", data);
-        panic!();
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Header {
+                    magic1:    b"RIFF",
+                    file_size: 1926660,
+                    magic2:    b"AVI ",
+            })
+        );
+    }
+
+    #[test]
+    fn parse_block_header() {
+        let data = block_header(&drop[12..20]);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                BlockHeader {
+                    tag: 1414744396,
+                    size: 192,
+            })
+        );
+        let data = block_header(&verona[12..20]);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                BlockHeader {
+                    tag: 1414744396,
+                    size: 370,
+            })
+        );
     }
 }
