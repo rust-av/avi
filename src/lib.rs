@@ -34,15 +34,15 @@ named!(pub header<Header>,
 );
 
 #[derive(Debug,Clone,PartialEq)]
-pub struct BlockHeader {
-    tag:  u32,
+pub struct BlockHeader<'a> {
+    tag:  &'a [u8],
     size: u32,
 }
 
 named!(pub block_header<BlockHeader>,
     do_parse!(
-        tag:  le_u32 >>
-        size: le_u32 >>
+        tag:  take!(4) >>
+        size: le_u32   >>
         (BlockHeader {
             tag,
           size,
@@ -50,9 +50,42 @@ named!(pub block_header<BlockHeader>,
     )
 );
 
+#[derive(Debug,Clone,PartialEq)]
+pub enum Block {
+    List(List),
+    Default
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum List {
+    Movi(u32),
+    Default,
+}
+
+named!(pub list<List>,
+    switch!(take!(4),
+        b"INFO" => value!(List::Default) |
+        b"ncdt" => value!(List::Default) |
+        b"movi" => value!(List::Movi(42))
+    )
+);
+
+named!(pub block<Block>,
+    do_parse!(
+        tag:   take!(4) >>
+        size:  le_u32   >>
+        block: switch!(value!(tag),
+          b"LIST" => map!(list, |l| Block::List(l)) |
+          _       => value!(Block::Default)
+        )  >>
+        (block)
+
+    )
+);
+
 #[cfg(test)]
 mod tests {
-    use nom::IResult;
+    use nom::{HexDisplay,IResult};
     use super::*;
 
     const drop   : &'static [u8] = include_bytes!("../assets/drop.avi");
@@ -87,13 +120,14 @@ mod tests {
 
     #[test]
     fn parse_block_header() {
+        println!("block:\n{}", &drop[12..20].to_hex(16));
         let data = block_header(&drop[12..20]);
         println!("data: {:?}", data);
         assert_eq!(data,
             IResult::Done(
                 &b""[..],
                 BlockHeader {
-                    tag: 1414744396,
+                    tag: b"LIST",
                     size: 192,
             })
         );
@@ -103,7 +137,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 BlockHeader {
-                    tag: 1414744396,
+                    tag: b"LIST",
                     size: 370,
             })
         );
