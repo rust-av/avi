@@ -53,6 +53,7 @@ named!(pub block_header<BlockHeader>,
 #[derive(Debug,Clone,PartialEq)]
 pub enum Block {
     List(List),
+    Unimplemented,
     Default,
 }
 
@@ -92,6 +93,15 @@ pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8
         size:  le_u32   >>
         block: switch!(value!(tag),
           b"LIST" => map!(call!(list, stream_offset, file_size, size), |l| Block::List(l)) |
+          b"IDIT" => value!(Block::Unimplemented) |
+          b"dmlh" => value!(Block::Unimplemented) |
+          b"amvh" => value!(Block::Unimplemented) |
+          b"avih" => value!(Block::Unimplemented) |
+          b"strh" => value!(Block::Unimplemented) |
+          b"strf" => value!(Block::Unimplemented) |
+          b"indx" => value!(Block::Unimplemented) |
+          b"vprp" => value!(Block::Unimplemented) |
+          b"strn" => value!(Block::Unimplemented) |
           _       => value!(Block::Default)
         )  >>
         (block)
@@ -136,7 +146,7 @@ mod tests {
 
     #[test]
     fn parse_block_header() {
-        println!("block:\n{}", &drop[12..20].to_hex(16));
+        println!("block:\n{}", &drop[12..200].to_hex(16));
         let data = block_header(&drop[12..20]);
         println!("data: {:?}", data);
         assert_eq!(data,
@@ -161,8 +171,8 @@ mod tests {
 
     #[test]
     fn parse_block() {
-        println!("block:\n{}", &drop[12..28].to_hex(16));
-        let data = block(&drop[12..28], 12, 675628);
+        println!("block:\n{}", &drop[12..24].to_hex(16));
+        let data = block(&drop[12..24], 12, 675628);
         println!("data: {:?}", data);
         assert_eq!(data,
             IResult::Done(
@@ -170,7 +180,28 @@ mod tests {
                 Block::List(List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
             )
         );
-        let data = block(&verona[12..28], 12, 1926660);
+        let data = block(&verona[12..24], 12, 1926660);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Block::List(List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
+            )
+        );
+    }
+
+    #[test]
+    fn parse_block2() {
+        println!("block:\n{}", &drop[112..120].to_hex(16));
+        let data = block(&drop[112..120], 112, 675628);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Block::Default
+            )
+        );
+        let data = block(&verona[382..398], 382, 1926660);
         println!("data: {:?}", data);
         assert_eq!(data,
             IResult::Done(
