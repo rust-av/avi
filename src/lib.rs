@@ -1,6 +1,6 @@
 #[macro_use] extern crate nom;
 
-use nom::le_u32;
+use nom::{IResult,le_u32};
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Header<'a> {
@@ -9,8 +9,8 @@ pub struct Header<'a> {
     magic2:    &'a [u8],
 }
 
-named!(pub header<Header>,
-    map!(
+pub fn header(input: &[u8]) -> IResult<&[u8], Header> {
+    map!(input,
         alt!(
           tuple!(
               tag!(b"RIFF"),
@@ -31,7 +31,7 @@ named!(pub header<Header>,
             }
         }
     )
-);
+}
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct BlockHeader<'a> {
@@ -62,17 +62,16 @@ pub enum List {
     Default,
 }
 
-named_args!(pub list(file_size: u32)<List>,
-    switch!(take!(4),
+pub fn list(input: &[u8], file_size: u32) -> IResult<&[u8], List> {
+    switch!(input, take!(4),
         b"INFO" => value!(List::Default) |
         b"ncdt" => value!(List::Default) |
         b"movi" => value!(List::Movi(42))
     )
-);
+}
 
-named_args!(block(file_size: u32) <Block>,
-//named!(pub block<Block>,
-    do_parse!(
+pub fn block(input: &[u8], file_size: u32) -> IResult<&[u8], Block> {
+    do_parse!(input,
         tag:   take!(4) >>
         size:  le_u32   >>
         block: switch!(value!(tag),
@@ -82,7 +81,7 @@ named_args!(block(file_size: u32) <Block>,
         (block)
 
     )
-);
+}
 
 #[cfg(test)]
 mod tests {
