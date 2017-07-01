@@ -52,7 +52,7 @@ pub fn parse_blocks(input: &[u8], file_size: usize, offset: usize, level: List) 
                 Block::Default       => panic!("default block:\n{}", &input[..input.offset(i)].to_hex(16)),
                 Block::Avih(h)       => {
                     println!("got main AVI header: {:?}", h);
-                    (remaining_offset, State::Blocks(file_size, offset, level))
+                    (remaining_offset, State::Blocks(file_size, offset + remaining_offset, level))
                 },
                 Block::List(size, l) => {
                     match level {
@@ -98,6 +98,7 @@ mod tests {
                 break;
             }
 
+            println!("\nwill parse:\n{}\n", &drop[offset..200].to_hex(16));
             let state = opt_state.take().expect("should not be none here");
             let (mv, state) = advance(state, &drop[offset..]);
 

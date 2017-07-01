@@ -136,7 +136,7 @@ pub fn avih(input: &[u8]) -> IResult<&[u8], MainAVIHeader> {
         suggested_buffer_size: le_u32 >>
         width:                 le_u32 >>
         height:                le_u32 >>
-                               take!(4) >>
+                               take!(16) >>
         (MainAVIHeader {
             microsec_per_frame,
             max_bytes_per_sec,
