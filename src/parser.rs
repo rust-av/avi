@@ -50,13 +50,14 @@ named!(pub block_header<BlockHeader>,
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum Block {
-    List(List),
+    List(usize, List),
     Unimplemented,
     Default,
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum List {
+    Hdrl,
     Movi(usize),
     Default,
     Unknown(Vec<u8>),
@@ -78,6 +79,7 @@ pub fn list(input: &[u8], stream_offset: usize, file_size: u32, list_size: u32) 
               List::Movi(file_size as usize)
           }
         })                               |
+        b"hdrl" => value!(List::Hdrl)    |
         a       => value!(List::Unknown(a.to_owned()))
     )
 }
@@ -90,7 +92,7 @@ pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8
         tag:   take!(4) >>
         size:  le_u32   >>
         block: switch!(value!(tag),
-          b"LIST" => map!(call!(list, stream_offset, file_size, size), |l| Block::List(l)) |
+          b"LIST" => map!(call!(list, stream_offset, file_size, size), |l| Block::List(size as usize, l)) |
           b"IDIT" => value!(Block::Unimplemented) |
           b"dmlh" => value!(Block::Unimplemented) |
           b"amvh" => value!(Block::Unimplemented) |
@@ -175,7 +177,7 @@ mod tests {
         assert_eq!(data,
             IResult::Done(
                 &b""[..],
-                Block::List(List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
+                Block::List(192, List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
             )
         );
         let data = block(&verona[12..24], 12, 1926660);
@@ -183,7 +185,7 @@ mod tests {
         assert_eq!(data,
             IResult::Done(
                 &b""[..],
-                Block::List(List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
+                Block::List(370, List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
             )
         );
     }
