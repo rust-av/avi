@@ -53,29 +53,45 @@ named!(pub block_header<BlockHeader>,
 #[derive(Debug,Clone,PartialEq)]
 pub enum Block {
     List(List),
-    Default
+    Default,
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum List {
-    Movi(u32),
+    Movi(usize),
     Default,
+    Unknown(Vec<u8>),
 }
 
-pub fn list(input: &[u8], file_size: u32) -> IResult<&[u8], List> {
+pub fn list(input: &[u8], stream_offset: usize, file_size: u32, list_size: u32) -> IResult<&[u8], List> {
     switch!(input, take!(4),
         b"INFO" => value!(List::Default) |
         b"ncdt" => value!(List::Default) |
-        b"movi" => value!(List::Movi(42))
+        b"movi" => value!({
+          if list_size != 0 {
+              let offset = stream_offset +
+                4 + // tag  (4 bytes)
+                4; // size (4 bytes)
+
+              // FIXME: check for overflow
+              List::Movi(offset + list_size as usize + (list_size & 1) as usize)
+          } else {
+              List::Movi(file_size as usize)
+          }
+        })                               |
+        a       => value!(List::Unknown(a.to_owned()))
     )
 }
 
-pub fn block(input: &[u8], file_size: u32) -> IResult<&[u8], Block> {
+/// block()
+///
+/// stream_offset is the offset corresponding to the position of `input` from the beginning of the stream
+pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8], Block> {
     do_parse!(input,
         tag:   take!(4) >>
         size:  le_u32   >>
         block: switch!(value!(tag),
-          b"LIST" => map!(call!(list, file_size), |l| Block::List(l)) |
+          b"LIST" => map!(call!(list, stream_offset, file_size, size), |l| Block::List(l)) |
           _       => value!(Block::Default)
         )  >>
         (block)
@@ -140,6 +156,27 @@ mod tests {
                     tag: b"LIST",
                     size: 370,
             })
+        );
+    }
+
+    #[test]
+    fn parse_block() {
+        println!("block:\n{}", &drop[12..28].to_hex(16));
+        let data = block(&drop[12..28], 12, 675628);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Block::List(List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8)))
+            )
+        );
+        let data = block(&verona[12..28], 12, 1926660);
+        println!("data: {:?}", data);
+        assert_eq!(data,
+            IResult::Done(
+                &b""[..],
+                Block::Default
+            )
         );
     }
 }
