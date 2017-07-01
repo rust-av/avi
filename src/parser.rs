@@ -3,7 +3,7 @@ use nom::{IResult,le_u32};
 #[derive(Debug,Clone,PartialEq)]
 pub struct Header<'a> {
     magic1:    &'a [u8],
-    file_size: u32,
+    pub file_size: u32,
     magic2:    &'a [u8],
 }
 
