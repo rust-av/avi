@@ -10,15 +10,26 @@ pub struct Header<'a> {
 }
 
 named!(pub header<Header>,
-    do_parse!(
-        magic1:    tag!(b"RIFF") >>
-        file_size: le_u32        >>
-        magic2:    tag!(b"AVI ") >>
-        (Header {
-            magic1,
-            file_size,
-            magic2,
-        })
+    map!(
+        alt!(
+          tuple!(
+              tag!(b"RIFF"),
+              le_u32,
+              alt!(tag!(b"AVI ") | tag!(b"AVIX") | tag!(b"AVI\x19") | tag!(b"AMV "))
+          )
+        | tuple!(
+              tag!(b"ON2 "),
+              le_u32,
+              tag!(b"ON2f")
+          )
+        ),
+        |(magic1, file_size, magic2)| {
+            Header {
+                magic1,
+                file_size,
+                magic2,
+            }
+        }
     )
 );
 
