@@ -62,7 +62,7 @@ pub enum List {
     Default,
 }
 
-named!(pub list<List>,
+named_args!(pub list(file_size: u32)<List>,
     switch!(take!(4),
         b"INFO" => value!(List::Default) |
         b"ncdt" => value!(List::Default) |
@@ -70,12 +70,13 @@ named!(pub list<List>,
     )
 );
 
-named!(pub block<Block>,
+named_args!(block(file_size: u32) <Block>,
+//named!(pub block<Block>,
     do_parse!(
         tag:   take!(4) >>
         size:  le_u32   >>
         block: switch!(value!(tag),
-          b"LIST" => map!(list, |l| Block::List(l)) |
+          b"LIST" => map!(call!(list, file_size), |l| Block::List(l)) |
           _       => value!(Block::Default)
         )  >>
         (block)
