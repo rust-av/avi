@@ -9,7 +9,7 @@ pub struct Header<'a> {
     magic2:    &'a [u8],
 }
 
-named!(header<Header>,
+named!(pub header<Header>,
     do_parse!(
         magic1:    tag!(b"RIFF") >>
         file_size: le_u32        >>
