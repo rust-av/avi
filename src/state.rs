@@ -1,4 +1,4 @@
-use nom::{HexDisplay,IResult,Offset};
+use nom::{le_u32,HexDisplay,IResult,Offset};
 use parser::{self,block,bitmap_info_header,header,strf,AVIStreamHeader,BitmapInfoHeader,Block,FccType};
 
 #[derive(Debug,Clone,PartialEq)]
@@ -16,7 +16,7 @@ pub enum VideoIndexState {
     Initial(AVIStreamHeader),
     BMP(AVIStreamHeader,BitmapInfoHeader),
     Index(AVIStreamHeader,BitmapInfoHeader),
-    End(AVIStreamHeader,BitmapInfoHeader,String),
+    End(AVIStreamHeader,BitmapInfoHeader),
     Error,
 }
 
@@ -32,6 +32,13 @@ pub struct Context {
     file_size:     usize,
     stream_offset: usize,
     level:         List,
+    video:         Option<VideoContext>,
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct VideoContext {
+    stream: AVIStreamHeader,
+    bitmap: BitmapInfoHeader,
 }
 
 pub fn advance(state: State, input: &[u8]) -> (usize, State) {
@@ -55,7 +62,8 @@ pub fn parse_initial(input: &[u8]) -> (usize, State) {
         IResult::Done(i, header) => (input.offset(i), State::Blocks(Context {
             file_size: header.file_size as usize,
             stream_offset: input.offset(i),
-            level: List::Nil
+            level: List::Nil,
+            video: None,
         })),
     }
 }
@@ -87,12 +95,16 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                 Block::Strh(h)       => {
                     println!("got AVI stream header: {:?}\n", h);
                     match h.fcc_type {
-                        FccType::Video    => (
-                            advancing,
-                            State::VideoIndexStream(
-                                ctx,
-                                VideoIndexState::Initial(h)
-                        )),
+                        FccType::Video    => {
+                            if ctx.video.is_none() {
+                                (advancing, State::VideoIndexStream(
+                                    ctx,
+                                    VideoIndexState::Initial(h)
+                                ))
+                            } else {
+                                (0, State::Error)
+                            }
+                        },
                         FccType::Audio    => (advancing, State::AudioIndexStream(ctx)),
                         FccType::Subtitle => (advancing, State::SubtitleIndexStream(ctx)),
                     }
@@ -103,7 +115,8 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                             State::Blocks(Context {
                                 file_size: ctx.file_size,
                                 stream_offset: ctx.stream_offset,
-                                level: List::Node(ctx.stream_offset + size, l, Box::new(List::Nil))
+                                level: List::Node(ctx.stream_offset + size, l, Box::new(List::Nil)),
+                                video: None,
                             })),
                         List::Node(sz, _, _) => {
                             if sz < ctx.stream_offset + size {
@@ -136,6 +149,22 @@ pub fn parse_video_index_stream(input: &[u8], mut ctx: Context, mut state: Video
                 (advancing, State::VideoIndexStream(ctx, VideoIndexState::BMP(header, bmp_header)))
             },
         },
+        VideoIndexState::BMP(header, bmp_header) => {
+            match tuple!(input, tag!(b"JUNK"), le_u32) {
+                IResult::Error(_)         => (0, State::Error),
+                IResult::Incomplete(_)    => (0, State::VideoIndexStream(ctx, VideoIndexState::BMP(header, bmp_header))),
+                IResult::Done(i, (_, sz)) => {
+                    let advancing = input.offset(i) + sz as usize;
+                    ctx.stream_offset += advancing;
+                    ctx.video = Some(VideoContext {
+                        stream: header,
+                        bitmap: bmp_header,
+                    });
+                    (advancing, State::Blocks(ctx))
+                }
+
+            }
+        }
         _ => unimplemented!()
     }
 }
