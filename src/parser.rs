@@ -1,4 +1,4 @@
-use nom::{IResult,le_i16,le_u16,le_u32};
+use nom::{IResult,le_i16,le_u16,le_i32,le_u32};
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Header<'a> {
@@ -163,7 +163,7 @@ pub struct Rect {
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct AVIStreamHeader {
-    fcc_type:               FccType,
+    pub fcc_type:           FccType,
     fcc_handler:            u32,
     flags:                  u32,
     priority:               u16,
@@ -235,6 +235,50 @@ pub fn fcc_type(input: &[u8]) -> IResult<&[u8], FccType> {
     )
 }
 
+pub fn strf(input: &[u8]) -> IResult<&[u8], BitmapInfoHeader> {
+    do_parse!(input,
+                tag!(b"strf")                        >>
+        size:   verify!(le_u32, |val:u32| val == 40) >>
+        header: bitmap_info_header                   >>
+        (header)
+    )
+}
+
+/// as seen on https://msdn.microsoft.com/en-us/library/windows/desktop/dd183376(v=vs.85).aspx
+#[derive(Debug,Clone,PartialEq)]
+pub struct BitmapInfoHeader {
+    size:             u32,
+    width:            i32,
+    height:           i32,
+    planes:           u16,
+    bit_count:        u16,
+    compression:      u32,
+    size_image:       u32,
+    xpels_per_meter:  i32,
+    ypels_per_meter:  i32,
+    clr_used:         u32,
+    clr_important:    u32,
+}
+
+pub fn bitmap_info_header(input: &[u8]) -> IResult<&[u8], BitmapInfoHeader> {
+    do_parse!(input,
+        size:             le_u32 >>
+        width:            le_i32 >>
+        height:           le_i32 >>
+        planes:           le_u16 >>
+        bit_count:        le_u16 >>
+        compression:      le_u32 >>
+        size_image:       le_u32 >>
+        xpels_per_meter:  le_i32 >>
+        ypels_per_meter:  le_i32 >>
+        clr_used:         le_u32 >>
+        clr_important:    le_u32 >>
+        (BitmapInfoHeader {
+          size, width, height, planes, bit_count, compression, size_image, xpels_per_meter,
+          ypels_per_meter, clr_used, clr_important
+        })
+    )
+}
 #[cfg(test)]
 mod tests {
     use nom::{HexDisplay,IResult};
