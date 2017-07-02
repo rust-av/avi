@@ -163,7 +163,7 @@ pub struct Rect {
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct AVIStreamHeader {
-    fcc_type:               u32,
+    fcc_type:               FccType,
     fcc_handler:            u32,
     flags:                  u32,
     priority:               u16,
@@ -179,25 +179,32 @@ pub struct AVIStreamHeader {
     frame:                  Rect,
 }
 
+#[derive(Debug,Clone,PartialEq)]
+pub enum FccType {
+  Video,
+  Audio,
+  Subtitle
+}
+
 pub fn strh(input: &[u8]) -> IResult<&[u8], AVIStreamHeader> {
     do_parse!(input,
-        fcc_type:               le_u32 >>
-        fcc_handler:            le_u32 >>
-        flags:                  le_u32 >>
-        priority:               le_u16 >>
-        language:               le_u16 >>
-        initial_frames:         le_u32 >>
-        scale:                  le_u32 >>
-        rate:                   le_u32 >>
-        start:                  le_u32 >>
-        length:                 le_u32 >>
-        suggested_buffer_size:  le_u32 >>
-        quality:                le_u32 >>
-        sample_size:            le_u32 >>
-        left:                   le_i16 >>
-        top:                    le_i16 >>
-        right:                  le_i16 >>
-        bottom:                 le_i16 >>
+        fcc_type:               fcc_type >>
+        fcc_handler:            le_u32   >>
+        flags:                  le_u32   >>
+        priority:               le_u16   >>
+        language:               le_u16   >>
+        initial_frames:         le_u32   >>
+        scale:                  le_u32   >>
+        rate:                   le_u32   >>
+        start:                  le_u32   >>
+        length:                 le_u32   >>
+        suggested_buffer_size:  le_u32   >>
+        quality:                le_u32   >>
+        sample_size:            le_u32   >>
+        left:                   le_i16   >>
+        top:                    le_i16   >>
+        right:                  le_i16   >>
+        bottom:                 le_i16   >>
         (AVIStreamHeader {
           fcc_type,
           fcc_handler,
@@ -216,6 +223,15 @@ pub fn strh(input: &[u8]) -> IResult<&[u8], AVIStreamHeader> {
             left, top, right, bottom
           },
         })
+    )
+}
+
+pub fn fcc_type(input: &[u8]) -> IResult<&[u8], FccType> {
+    switch!(input,
+        take!(4),
+        b"vids" => value!(FccType::Video)    |
+        b"auds" => value!(FccType::Audio)    |
+        b"txts" => value!(FccType::Subtitle)
     )
 }
 
