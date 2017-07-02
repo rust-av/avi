@@ -1,11 +1,23 @@
 use nom::{HexDisplay,IResult,Offset};
-use parser::{self,block,header,Block};
+use parser::{self,block,bitmap_info_header,header,strf,AVIStreamHeader,BitmapInfoHeader,Block,FccType};
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum State {
     Initial,
     Error,
     Blocks(Context),
+    VideoIndexStream(Context,VideoIndexState),
+    AudioIndexStream(Context),
+    SubtitleIndexStream(Context),
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum VideoIndexState {
+    Initial(AVIStreamHeader),
+    BMP(AVIStreamHeader,BitmapInfoHeader),
+    Index(AVIStreamHeader,BitmapInfoHeader),
+    End(AVIStreamHeader,BitmapInfoHeader,String),
+    Error,
 }
 
 #[derive(Debug,Clone,PartialEq)]
@@ -26,6 +38,9 @@ pub fn advance(state: State, input: &[u8]) -> (usize, State) {
     match state {
         State::Initial => parse_initial(input),
         State::Blocks(context) => parse_blocks(input, context),
+        State::VideoIndexStream(context, index_state) => parse_video_index_stream(input, context, index_state),
+        State::AudioIndexStream(context) => parse_audio_index_stream(input, context),
+        State::SubtitleIndexStream(context) => parse_subtitle_index_stream(input, context),
         _              => panic!("unimplemented state"),
 
 
@@ -71,7 +86,16 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                 },
                 Block::Strh(h)       => {
                     println!("got AVI stream header: {:?}\n", h);
-                    (advancing, State::Blocks(ctx))
+                    match h.fcc_type {
+                        FccType::Video    => (
+                            advancing,
+                            State::VideoIndexStream(
+                                ctx,
+                                VideoIndexState::Initial(h)
+                        )),
+                        FccType::Audio    => (advancing, State::AudioIndexStream(ctx)),
+                        FccType::Subtitle => (advancing, State::SubtitleIndexStream(ctx)),
+                    }
                 },
                 Block::List(size, l) => {
                     match ctx.level {
@@ -100,6 +124,30 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
     }
 }
 
+pub fn parse_video_index_stream(input: &[u8], mut ctx: Context, mut state: VideoIndexState) -> (usize, State) {
+    match state {
+        VideoIndexState::Initial(header) => match strf(input) {
+            IResult::Error(_)        => (0, State::Error),
+            IResult::Incomplete(_)   => (0, State::VideoIndexStream(ctx, VideoIndexState::Initial(header))),
+            IResult::Done(i, bmp_header) => {
+                println!("got a bitmap info header: {:?}\n", bmp_header);
+                let advancing = input.offset(i);
+                ctx.stream_offset += advancing;
+                (advancing, State::VideoIndexStream(ctx, VideoIndexState::BMP(header, bmp_header)))
+            },
+        },
+        _ => unimplemented!()
+    }
+}
+
+pub fn parse_audio_index_stream(input: &[u8], mut ctx: Context) -> (usize, State) {
+    unimplemented!()
+}
+
+pub fn parse_subtitle_index_stream(input: &[u8], mut ctx: Context) -> (usize, State) {
+    unimplemented!()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,16 +159,17 @@ mod tests {
     fn state_initial() {
         let mut opt_state = Some(State::Initial);
         let mut offset    = 0usize;
+        let     data      = drop;
 
         loop {
-            if offset > drop.len() {
+            if offset > data.len() {
                 println!("file ended");
                 break;
             }
 
-            println!("\nwill parse:\n{}\n", &drop[offset..200].to_hex(16));
+            println!("\nwill parse:\n{}\n", &data[offset..offset+512].to_hex(16));
             let state = opt_state.take().expect("should not be none here");
-            let (mv, state) = advance(state, &drop[offset..]);
+            let (mv, state) = advance(state, &data[offset..]);
 
             println!("state is: {:?} (advancing {})", state, mv);
             offset += mv;
