@@ -1,4 +1,4 @@
-use nom::{IResult,le_u32};
+use nom::{IResult,le_i16,le_u16,le_u32};
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Header<'a> {
@@ -52,6 +52,7 @@ named!(pub block_header<BlockHeader>,
 pub enum Block {
     List(usize, List),
     Avih(MainAVIHeader),
+    Strh(AVIStreamHeader),
     Unimplemented,
     Default,
 }
@@ -98,7 +99,7 @@ pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8
           b"dmlh" => value!(Block::Unimplemented) |
           b"amvh" => value!(Block::Unimplemented) |
           b"avih" => map!(avih, |h| Block::Avih(h)) |
-          b"strh" => value!(Block::Unimplemented) |
+          b"strh" => map!(strh, |h| Block::Strh(h)) |
           b"strf" => value!(Block::Unimplemented) |
           b"indx" => value!(Block::Unimplemented) |
           b"vprp" => value!(Block::Unimplemented) |
@@ -148,6 +149,72 @@ pub fn avih(input: &[u8]) -> IResult<&[u8], MainAVIHeader> {
             suggested_buffer_size,
             width,
             height,
+        })
+    )
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct Rect {
+    left:   i16,
+    top:    i16,
+    right:  i16,
+    bottom: i16,
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct AVIStreamHeader {
+    fcc_type:               u32,
+    fcc_handler:            u32,
+    flags:                  u32,
+    priority:               u16,
+    language:               u16,
+    initial_frames:         u32,
+    scale:                  u32,
+    rate:                   u32,
+    start:                  u32,
+    length:                 u32,
+    suggested_buffer_size:  u32,
+    quality:                u32,
+    sample_size:            u32,
+    frame:                  Rect,
+}
+
+pub fn strh(input: &[u8]) -> IResult<&[u8], AVIStreamHeader> {
+    do_parse!(input,
+        fcc_type:               le_u32 >>
+        fcc_handler:            le_u32 >>
+        flags:                  le_u32 >>
+        priority:               le_u16 >>
+        language:               le_u16 >>
+        initial_frames:         le_u32 >>
+        scale:                  le_u32 >>
+        rate:                   le_u32 >>
+        start:                  le_u32 >>
+        length:                 le_u32 >>
+        suggested_buffer_size:  le_u32 >>
+        quality:                le_u32 >>
+        sample_size:            le_u32 >>
+        left:                   le_i16 >>
+        top:                    le_i16 >>
+        right:                  le_i16 >>
+        bottom:                 le_i16 >>
+        (AVIStreamHeader {
+          fcc_type,
+          fcc_handler,
+          flags,
+          priority,
+          language,
+          initial_frames,
+          scale,
+          rate,
+          start,
+          length,
+          suggested_buffer_size,
+          quality,
+          sample_size,
+          frame: Rect {
+            left, top, right, bottom
+          },
         })
     )
 }

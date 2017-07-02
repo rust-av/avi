@@ -66,7 +66,11 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                 Block::Unimplemented => panic!("unimplemented block:\n{}", &input[..advancing].to_hex(16)),
                 Block::Default       => panic!("default block:\n{}", &input[..advancing].to_hex(16)),
                 Block::Avih(h)       => {
-                    println!("got main AVI header: {:?}", h);
+                    println!("got main AVI header: {:?}\n", h);
+                    (advancing, State::Blocks(ctx))
+                },
+                Block::Strh(h)       => {
+                    println!("got AVI stream header: {:?}\n", h);
                     (advancing, State::Blocks(ctx))
                 },
                 Block::List(size, l) => {
