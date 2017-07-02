@@ -1,5 +1,6 @@
 use nom::{le_u32,HexDisplay,IResult,Offset};
 use parser::{self,block,bitmap_info_header,header,strf,AVIStreamHeader,BitmapInfoHeader,Block,FccType};
+use std::cmp;
 
 #[derive(Debug,Clone,PartialEq)]
 pub enum State {
@@ -21,17 +22,16 @@ pub enum VideoIndexState {
 }
 
 #[derive(Debug,Clone,PartialEq)]
-pub enum List {
-    Nil,
-    // end of list, current list, parent list
-    Node(usize, parser::List, Box<List>),
+pub struct List {
+    end_offset: usize,
+    current:    parser::List,
 }
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct Context {
     file_size:     usize,
     stream_offset: usize,
-    level:         List,
+    level:         Vec<List>,
     video:         Option<VideoContext>,
 }
 
@@ -45,7 +45,7 @@ pub fn advance(state: State, input: &[u8]) -> (usize, State) {
     match state {
         State::Initial => parse_initial(input),
         State::Blocks(context) => parse_blocks(input, context),
-        State::VideoIndexStream(mut context, index_state) => match parse_video_index_stream(input, index_state) {
+        State::VideoIndexStream(mut context, index_state) => match parse_video_index_stream(input, &mut context, index_state) {
             (_, VideoIndexState::Error) => (0, State::Error),
             (advancing, VideoIndexState::End(stream, bitmap)) => {
                 context.stream_offset += advancing;
@@ -75,19 +75,31 @@ pub fn parse_initial(input: &[u8]) -> (usize, State) {
         IResult::Done(i, header) => (input.offset(i), State::Blocks(Context {
             file_size: header.file_size as usize,
             stream_offset: input.offset(i),
-            level: List::Nil,
+            level: vec!(),
             video: None,
         })),
     }
 }
 
+pub fn unpack_list(input: &[u8], mut ctx: Context) -> (&[u8], Context) {
+    loop {
+        if ctx.level.is_empty() {
+            return (input, ctx);
+        } else {
+            let end_offset = ctx.level[ctx.level.len() - 1].end_offset;
+            if ctx.stream_offset < end_offset {
+                return (&input[..cmp::min(end_offset - ctx.stream_offset, input.len())], ctx)
+            } else if ctx.stream_offset == end_offset {
+                let _ = ctx.level.pop();
+            } else {
+                panic!("the stream offset should never get farther than the list's end");
+            }
+        }
+    }
+}
+
 pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
-    //FIXME: handle closing list
-    let sl = match ctx.level {
-        List::Nil                   => input,
-      // min of offset and input length?
-        List::Node(remaining, _, _) => &input[..(remaining - ctx.stream_offset)]
-    };
+    let(sl, mut ctx) = unpack_list(input, ctx);
 
     match block(sl, ctx.stream_offset, ctx.file_size as u32) {
         IResult::Error(e)        => {
@@ -123,25 +135,28 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                     }
                 },
                 Block::List(size, l) => {
-                    match ctx.level {
-                        List::Nil => (advancing,
-                            State::Blocks(Context {
-                                file_size: ctx.file_size,
-                                stream_offset: ctx.stream_offset,
-                                level: List::Node(ctx.stream_offset + size, l, Box::new(List::Nil)),
-                                video: None,
-                            })),
-                        List::Node(sz, _, _) => {
-                            if sz < ctx.stream_offset + size {
-                                // the new list would be larger than the parent one
-                                println!("the new list would be larger ({}) than the parent one ({})",
-                                    ctx.stream_offset + size, sz);
-                                (advancing, State::Error)
-                            } else {
-                                ctx.level = List::Node(ctx.stream_offset + size, l, Box::new(ctx.level));
-                                (advancing,
-                                State::Blocks(ctx))
-                            }
+                    if ctx.level.is_empty() {
+                        (advancing, State::Blocks(Context {
+                            file_size: ctx.file_size,
+                            stream_offset: ctx.stream_offset,
+                            level: vec!(List {
+                                end_offset: ctx.stream_offset + size,
+                                current: l
+                            }),
+                            video: None,
+                        }))
+                    } else {
+                        if ctx.level[ctx.level.len() - 1].end_offset < ctx.stream_offset + size {
+                            // the new list would be larger than the parent one
+                            println!("the new list would be larger ({}) than the parent one ({})",
+                                ctx.stream_offset + size, ctx.level[ctx.level.len() - 1].end_offset);
+                            (advancing, State::Error)
+                        } else {
+                            ctx.level.push(List {
+                                end_offset: ctx.stream_offset + size,
+                                current: l,
+                            });
+                            (advancing, State::Blocks(ctx))
                         }
                     }
                 }
@@ -150,7 +165,7 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
     }
 }
 
-pub fn parse_video_index_stream(input: &[u8], mut state: VideoIndexState) -> (usize, VideoIndexState) {
+pub fn parse_video_index_stream(input: &[u8], ctx: &mut Context, mut state: VideoIndexState) -> (usize, VideoIndexState) {
     match state {
         VideoIndexState::Initial(header) => match strf(input) {
             IResult::Error(_)        => (0, VideoIndexState::Error),
@@ -166,6 +181,20 @@ pub fn parse_video_index_stream(input: &[u8], mut state: VideoIndexState) -> (us
                 IResult::Error(_)         => (0, VideoIndexState::Error),
                 IResult::Incomplete(_)    => (0, VideoIndexState::BMP(header, bmp_header)),
                 IResult::Done(i, (_, sz)) => {
+                    loop {
+                        if ! ctx.level.is_empty() {
+                            let end_offset = ctx.level[ctx.level.len() - 1].end_offset;
+                            println!("stream offset == {} end offset == {}", ctx.stream_offset, end_offset);
+                            if ctx.stream_offset + 4 == end_offset {
+                                let _ = ctx.level.pop();
+                            } else {
+                                break;
+                            }
+                        } else {
+                          break;
+                        }
+                    }
+
                     let advancing = input.offset(i) + sz as usize;
                     (advancing, VideoIndexState::End(header, bmp_header))
                 }
