@@ -45,7 +45,20 @@ pub fn advance(state: State, input: &[u8]) -> (usize, State) {
     match state {
         State::Initial => parse_initial(input),
         State::Blocks(context) => parse_blocks(input, context),
-        State::VideoIndexStream(context, index_state) => parse_video_index_stream(input, context, index_state),
+        State::VideoIndexStream(mut context, index_state) => match parse_video_index_stream(input, index_state) {
+            (_, VideoIndexState::Error) => (0, State::Error),
+            (advancing, VideoIndexState::End(stream, bitmap)) => {
+                context.stream_offset += advancing;
+                context.video = Some(VideoContext {
+                    stream, bitmap,
+                });
+                (advancing, State::Blocks(context))
+            },
+            (advancing, video_state) => {
+                context.stream_offset += advancing;
+                (advancing, State::VideoIndexStream(context, video_state))
+            }
+        },
         State::AudioIndexStream(context) => parse_audio_index_stream(input, context),
         State::SubtitleIndexStream(context) => parse_subtitle_index_stream(input, context),
         _              => panic!("unimplemented state"),
@@ -137,32 +150,25 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
     }
 }
 
-pub fn parse_video_index_stream(input: &[u8], mut ctx: Context, mut state: VideoIndexState) -> (usize, State) {
+pub fn parse_video_index_stream(input: &[u8], mut state: VideoIndexState) -> (usize, VideoIndexState) {
     match state {
         VideoIndexState::Initial(header) => match strf(input) {
-            IResult::Error(_)        => (0, State::Error),
-            IResult::Incomplete(_)   => (0, State::VideoIndexStream(ctx, VideoIndexState::Initial(header))),
+            IResult::Error(_)        => (0, VideoIndexState::Error),
+            IResult::Incomplete(_)   => (0, VideoIndexState::Initial(header)),
             IResult::Done(i, bmp_header) => {
                 println!("got a bitmap info header: {:?}\n", bmp_header);
                 let advancing = input.offset(i);
-                ctx.stream_offset += advancing;
-                (advancing, State::VideoIndexStream(ctx, VideoIndexState::BMP(header, bmp_header)))
+                (advancing, VideoIndexState::BMP(header, bmp_header))
             },
         },
         VideoIndexState::BMP(header, bmp_header) => {
             match tuple!(input, tag!(b"JUNK"), le_u32) {
-                IResult::Error(_)         => (0, State::Error),
-                IResult::Incomplete(_)    => (0, State::VideoIndexStream(ctx, VideoIndexState::BMP(header, bmp_header))),
+                IResult::Error(_)         => (0, VideoIndexState::Error),
+                IResult::Incomplete(_)    => (0, VideoIndexState::BMP(header, bmp_header)),
                 IResult::Done(i, (_, sz)) => {
                     let advancing = input.offset(i) + sz as usize;
-                    ctx.stream_offset += advancing;
-                    ctx.video = Some(VideoContext {
-                        stream: header,
-                        bitmap: bmp_header,
-                    });
-                    (advancing, State::Blocks(ctx))
+                    (advancing, VideoIndexState::End(header, bmp_header))
                 }
-
             }
         }
         _ => unimplemented!()
