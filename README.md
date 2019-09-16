@@ -1,3 +1,4 @@
 # AVI demuxer written in Rust
 
-[![Build Status](https://travis-ci.org/rust-av/avi.svg?branch=master)](https://travis-ci.org/rust-av/avi)
+[![Actions Status](https://github.com/rust-av/avi/workflows/avi/badge.svg)](https://github.com/rust-av/avi/actions)
+
