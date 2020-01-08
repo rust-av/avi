@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Geoffroy Couprie <geo.couprie@gmail.com>"]
 
 [dependencies]
-nom = "^3.1"
+nom = "^5.1"
 
 [features]
 nightly = []
