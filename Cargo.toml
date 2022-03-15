@@ -2,9 +2,7 @@
 name = "avi"
 version = "0.1.0"
 authors = ["Geoffroy Couprie <geo.couprie@gmail.com>"]
+edition = "2021"
 
 [dependencies]
-nom = "^3.1"
-
-[features]
-nightly = []
+nom = "7"
