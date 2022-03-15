@@ -1,17 +1,16 @@
-
 [package]
 name = "avi-fuzz"
 version = "0.0.1"
 authors = ["Automatically generated"]
+edition = "2021"
 publish = false
 
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies.avi]
-path = ".."
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+[dependencies]
+avi = { path = ".." }
+libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
 
 # Prevent this from interfering with workspaces
 [workspace]
