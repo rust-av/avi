@@ -38,7 +38,7 @@ pub struct BlockHeader<'a> {
     size: u32,
 }
 
-pub fn block_header<'a>(input: &'a [u8]) -> IResult<&'a [u8], BlockHeader<'a>> {
+pub fn block_header(input: &[u8]) -> IResult<&[u8], BlockHeader> {
     map(tuple((take(4usize), le_u32)), |(tag, size)| BlockHeader {
         tag,
         size,
@@ -93,13 +93,14 @@ pub fn list(
 /// stream_offset is the offset corresponding to the position of `input` from the beginning of the stream
 pub fn block(input: &[u8], stream_offset: usize, file_size: u32) -> IResult<&[u8], Block> {
     tuple((take(4usize), le_u32))(input).and_then(|(i, (tag, size))| match tag {
-        b"LIST" => list(i, stream_offset, file_size, size)
-            .and_then(|(i, l)| Ok((i, Block::List(size as usize, l)))),
+        b"LIST" => {
+            list(i, stream_offset, file_size, size).map(|(i, l)| (i, Block::List(size as usize, l)))
+        }
         b"IDIT" => Ok((i, Block::Unimplemented)),
         b"dmlh" => Ok((i, Block::Unimplemented)),
         b"amvh" => Ok((i, Block::Unimplemented)),
-        b"avih" => map(avih, |h| Block::Avih(h))(i),
-        b"strh" => map(strh, |h| Block::Strh(h))(i),
+        b"avih" => map(avih, Block::Avih)(i),
+        b"strh" => map(strh, Block::Strh)(i),
         b"strf" => Ok((i, Block::Unimplemented)),
         b"indx" => Ok((i, Block::Unimplemented)),
         b"vprp" => Ok((i, Block::Unimplemented)),
@@ -350,10 +351,7 @@ mod tests {
             data,
             Ok((
                 &b""[..],
-                Block::List(
-                    192,
-                    List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8))
-                )
+                Block::List(192, List::Unknown(vec!(b'h', b'd', b'r', b'l')))
             ))
         );
         let data = block(&verona[12..24], 12, 1926660);
@@ -362,10 +360,7 @@ mod tests {
             data,
             Ok((
                 &b""[..],
-                Block::List(
-                    370,
-                    List::Unknown(vec!('h' as u8, 'd' as u8, 'r' as u8, 'l' as u8))
-                )
+                Block::List(370, List::Unknown(vec!(b'h', b'd', b'r', b'l')))
             ))
         );
     }

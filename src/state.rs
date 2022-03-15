@@ -1,4 +1,4 @@
-use std::cmp;
+use std::cmp::{min, Ordering};
 
 use nom::{
     bytes::complete::tag, error::Error, number::complete::le_u32, sequence::tuple, Err, HexDisplay,
@@ -99,21 +99,25 @@ pub fn unpack_list(input: &[u8], mut ctx: Context) -> (&[u8], Context) {
             return (input, ctx);
         } else {
             let end_offset = ctx.level[ctx.level.len() - 1].end_offset;
-            if ctx.stream_offset < end_offset {
-                return (
-                    &input[..cmp::min(end_offset - ctx.stream_offset, input.len())],
-                    ctx,
-                );
-            } else if ctx.stream_offset == end_offset {
-                let _ = ctx.level.pop();
-            } else {
-                panic!("the stream offset should never get farther than the list's end");
+            match ctx.stream_offset.cmp(&end_offset) {
+                Ordering::Less => {
+                    return (
+                        &input[..min(end_offset - ctx.stream_offset, input.len())],
+                        ctx,
+                    )
+                }
+                Ordering::Equal => {
+                    ctx.level.pop();
+                }
+                Ordering::Greater => {
+                    panic!("the stream offset should never get farther than the list's end");
+                }
             }
         }
     }
 }
 
-pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
+pub fn parse_blocks(input: &[u8], ctx: Context) -> (usize, State) {
     let (sl, mut ctx) = unpack_list(input, ctx);
 
     match block(sl, ctx.stream_offset, ctx.file_size as u32) {
@@ -169,22 +173,20 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
                                 video: None,
                             }),
                         )
+                    } else if ctx.level[ctx.level.len() - 1].end_offset < ctx.stream_offset + size {
+                        // the new list would be larger than the parent one
+                        println!(
+                            "the new list would be larger ({}) than the parent one ({})",
+                            ctx.stream_offset + size,
+                            ctx.level[ctx.level.len() - 1].end_offset
+                        );
+                        (advancing, State::Error)
                     } else {
-                        if ctx.level[ctx.level.len() - 1].end_offset < ctx.stream_offset + size {
-                            // the new list would be larger than the parent one
-                            println!(
-                                "the new list would be larger ({}) than the parent one ({})",
-                                ctx.stream_offset + size,
-                                ctx.level[ctx.level.len() - 1].end_offset
-                            );
-                            (advancing, State::Error)
-                        } else {
-                            ctx.level.push(List {
-                                end_offset: ctx.stream_offset + size,
-                                current: l,
-                            });
-                            (advancing, State::Blocks(ctx))
-                        }
+                        ctx.level.push(List {
+                            end_offset: ctx.stream_offset + size,
+                            current: l,
+                        });
+                        (advancing, State::Blocks(ctx))
                     }
                 }
             }
@@ -195,7 +197,7 @@ pub fn parse_blocks(input: &[u8], mut ctx: Context) -> (usize, State) {
 pub fn parse_video_index_stream(
     input: &[u8],
     ctx: &mut Context,
-    mut state: VideoIndexState,
+    state: VideoIndexState,
 ) -> (usize, VideoIndexState) {
     match state {
         VideoIndexState::Initial(header) => match strf(input) {
@@ -252,11 +254,11 @@ pub fn parse_video_index_stream(
     }
 }
 
-pub fn parse_audio_index_stream(input: &[u8], mut ctx: Context) -> (usize, State) {
+pub fn parse_audio_index_stream(_input: &[u8], _ctx: Context) -> (usize, State) {
     unimplemented!()
 }
 
-pub fn parse_subtitle_index_stream(input: &[u8], mut ctx: Context) -> (usize, State) {
+pub fn parse_subtitle_index_stream(_input: &[u8], _ctx: Context) -> (usize, State) {
     unimplemented!()
 }
 
@@ -266,7 +268,7 @@ mod tests {
     use super::*;
 
     const drop: &[u8] = include_bytes!("../assets/drop.avi");
-    const verona: &[u8] = include_bytes!("../assets/verona60avi56k.avi");
+    const _verona: &[u8] = include_bytes!("../assets/verona60avi56k.avi");
 
     #[test]
     fn state_initial() {
