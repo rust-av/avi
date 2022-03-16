@@ -3,16 +3,56 @@ name: avi
 on: [push, pull_request]
 
 jobs:
-  build:
+
+  clippy-rustfmt:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Print rust version
-      run:  rustc -vV
+    - uses: actions/checkout@v2
+
+    - name: Install stable
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: clippy, rustfmt
+
+    - name: Run rustfmt
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: -- --check --verbose
+
+    - name: Lint
+      uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features --tests --benches
+
+  build:
+
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install stable
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
     - name: Run tests
       run: |
-        cargo test --all-features --verbose
-        cargo bench --all-features --verbose
-        cargo doc --all-features --verbose
+        cargo test --all-targets --all-features
+
+    - name: Generate docs
+      run: |
+        cargo doc --all-features --no-deps
