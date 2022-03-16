@@ -262,7 +262,7 @@ pub fn parse_subtitle_index_stream(_input: &[u8], _ctx: Context) -> (usize, Stat
     unimplemented!()
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 #[allow(non_upper_case_globals)]
 mod tests {
     use super::*;
@@ -295,4 +295,4 @@ mod tests {
             opt_state = Some(state);
         }
     }
-}
+}*/
