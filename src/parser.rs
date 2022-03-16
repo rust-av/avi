@@ -347,22 +347,10 @@ mod tests {
         println!("block:\n{}", &drop[12..24].to_hex(16));
         let data = block(&drop[12..24], 12, 675628);
         println!("data: {:?}", data);
-        assert_eq!(
-            data,
-            Ok((
-                &b""[..],
-                Block::List(192, List::Unknown(vec!(b'h', b'd', b'r', b'l')))
-            ))
-        );
+        assert_eq!(data, Ok((&b""[..], Block::List(192, List::Hdrl))));
         let data = block(&verona[12..24], 12, 1926660);
         println!("data: {:?}", data);
-        assert_eq!(
-            data,
-            Ok((
-                &b""[..],
-                Block::List(370, List::Unknown(vec!(b'h', b'd', b'r', b'l')))
-            ))
-        );
+        assert_eq!(data, Ok((&b""[..], Block::List(370, List::Hdrl))));
     }
 
     #[test]
@@ -371,8 +359,9 @@ mod tests {
         let data = block(&drop[112..120], 112, 675628);
         println!("data: {:?}", data);
         assert_eq!(data, Ok((&b""[..], Block::Default)));
-        let data = block(&verona[382..398], 382, 1926660);
-        println!("data: {:?}", data);
+        println!("block:\n{}", &verona[382..398].to_hex(16));
+        let data = block(&verona[382..390], 382, 1926660);
+        println!("data: {:?}\n", data);
         assert_eq!(data, Ok((&b""[..], Block::Default)));
     }
 }
